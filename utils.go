@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -63,10 +64,12 @@ func init() {
 	if v, b := os.LookupEnv("certificatesIndex"); b {
 		certificatesIndex = v
 	}
+
+	var ts string
 	if v, b := os.LookupEnv("storeMetrics"); b {
 		storeMetrics = stringToMetrics(v)
 	}
-	var tokens string
+	var tokens string = ""
 	if v, b := os.LookupEnv("tokens"); b {
 		tokens = v
 	}
@@ -84,20 +87,8 @@ func init() {
 	flag.BoolVar(&configureSync, "config", configureSync, "Enable configure sync (pull configur into ES)")
 	flag.BoolVar(&certificatesSync, "cert", certificatesSync, "Enable certificates sync (pull certificates into ES)")
 	flag.StringVar(&fixTime, "time", fixTime, "Set fixed time, all data sync job would run with startDate fixTime and endDate fixTime+buckets")
-	flag.StringVar(&tokens, "tokens", "", "Set tokens list, accounthash must included, for example a1b1c1d1:abcdef123asd;")
-	for _, k := range strings.Split(tokens, ";") {
-		for _, k2 := range strings.Split(k, ":") {
-			tokenList[string(k2[0])] = string(k2[1])
-		}
-	}
-	if len(tokenList) < 1 {
-		log.Panicf("tokens is required")
-	}
-
-	var ts string
-	ts = metricsToString(storeMetrics)
-	flag.StringVar(&ts, "metrics", ts, "metrics you want to synchronised, provide metrics type and names, for example transfer:rps,xferRateMbps;status:rps")
-	storeMetrics = stringToMetrics(ts)
+	flag.StringVar(&tokens, "tokens", tokens, "Set tokens list, accounthash must included, for example a1b1c1d1:abcdef123asd;")
+	flag.StringVar(&ts, "metrics", metricsToString(storeMetrics), "metrics you want to synchronised, provide metrics type and names, for example transfer:rps,xferRateMbps;status:rps")
 
 	flag.BoolVar(&enablePPROF, "pprof", enablePPROF, "Enable PPROF")
 	flag.StringVar(&pprofHost, "pprofHost", pprofHost, "Set listen host for PPROF")
@@ -118,6 +109,21 @@ func init() {
 	outPut := *flag.String("out", "/dev/stdout", "Set log output file")
 
 	flag.Parse()
+	storeMetrics = stringToMetrics(ts)
+	for _, k := range strings.Split(tokens, ";") {
+		k2 := strings.Split(k, ":")
+		if len(k2) != 2 {
+			fmt.Printf("accounthash must included in accesstokens\n")
+			flag.Usage()
+			os.Exit(1)
+		}
+		tokenList[string(k2[0])] = string(k2[1])
+	}
+	if len(tokenList) < 1 {
+		fmt.Printf("tokens is required\n")
+		flag.Usage()
+		os.Exit(1)
+	}
 
 	logOutPut = os.NewFile(uintptr(syscall.Stdout), outPut)
 	if enablePPROF {
@@ -152,8 +158,8 @@ func stringToMetrics(s string) map[string][]string {
 	for _, k := range as {
 		// parse type and keys from string
 		ts := strings.Split(k, ":")
-		if len(ts) != 1 {
-			log.Panicf("metrics format failed, found %d colon in metric string, 1 is exptected", len(ts))
+		if len(ts) != 2 {
+			log.Panicf("metrics format failed, found %d colon in metric string, 2 is exptected", len(ts))
 		}
 		switch ts[0] {
 		case "transfer", "storage", "status":
